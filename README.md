@@ -105,7 +105,7 @@ This is an npm package. You need Node.js 18+ and npm. If your project is new, ru
 Install globally (optional):
 
 ```bash
-npm install -g create-vite-react-tw4
+npm install create-vite-react-tw4
 ```
 
 Or run via `npx` (recommended):
