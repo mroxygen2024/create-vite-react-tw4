@@ -1,0 +1,45 @@
+{
+  "name": "create-vite-react-tw4",
+  "version": "0.1.0",
+  "description": "Scaffold a Vite + React + TypeScript + Tailwind CSS v4 starter with ESLint/Prettier and a minimal landing page.",
+  "bin": {
+    "create-vite-react-tw4": "./bin/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "eslint . --ext .js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mroxygen2024/create-vite-react-tw4.git"
+  },
+  "keywords": [
+    "vite",
+    "react",
+    "typescript",
+    "tailwind",
+    "tailwindcss",
+    "eslint",
+    "prettier",
+    "scaffold",
+    "template",
+    "cli"
+  ],
+  "author": "Fuad Sano",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/mroxygen2024/create-vite-react-tw4/issues"
+  },
+  "homepage": "https://github.com/mroxygen2024/create-vite-react-tw4#readme"
+}
