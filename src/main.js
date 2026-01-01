@@ -1,15 +1,11 @@
-// const fs = require('fs');
-// const path = require('path');
-// const { spawnSync } = require('child_process');
 import fs from 'fs';
 import path from 'path';
 import { spawnSync } from 'child_process';
 
 const log = (message) => console.log(`\n▸ ${message}`);
-
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 
-function runCommand(command, args, options = {}) {
+const runCommand = (command, args, options = {}) => {
   const result = spawnSync(command, args, {
     stdio: 'inherit',
     shell: false,
@@ -19,32 +15,30 @@ function runCommand(command, args, options = {}) {
   if (result.status !== 0) {
     throw new Error(`Command failed: ${command} ${args.join(' ')}`);
   }
-}
+};
 
-function ensureTarget(appPath) {
+const ensureTarget = (appPath) => {
   if (fs.existsSync(appPath) && fs.readdirSync(appPath).length > 0) {
     throw new Error(`Target directory already exists and is not empty: ${appPath}`);
   }
-}
+};
 
-function writeFile(appPath, relativePath, content) {
+const writeFile = (appPath, relativePath, content) => {
   const target = path.join(appPath, relativePath);
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, content, 'utf8');
-}
+};
 
-function createViteReactTs(appPath, appName) {
+const createViteReactTs = (appPath, appName) => {
   log(`Creating Vite + React + TypeScript app in ${appPath}`);
   runCommand(npmCommand, ['create', 'vite@latest', appName, '--', '--template', 'react-ts']);
   log('Installing base dependencies');
   runCommand(npmCommand, ['install'], { cwd: appPath });
-}
+};
 
-function installStylingAndLinting(appPath) {
-  log('Adding Tailwind CSS v4 and tooling');
-  runCommand(npmCommand, ['install', '-D', 'tailwindcss@next', 'postcss', 'autoprefixer'], {
-    cwd: appPath,
-  });
+const installStylingAndLinting = (appPath) => {
+  log('Adding Tailwind CSS v4 via @tailwindcss/vite');
+  runCommand(npmCommand, ['install', 'tailwindcss', '@tailwindcss/vite'], { cwd: appPath });
 
   log('Adding ESLint + Prettier');
   runCommand(
@@ -62,105 +56,115 @@ function installStylingAndLinting(appPath) {
     ],
     { cwd: appPath }
   );
-}
+};
 
-function configureTailwind(appPath) {
-  log('Configuring Tailwind CSS and PostCSS');
-  writeFile(
-    appPath,
-    'tailwind.config.js',
-    `/** @type {import('tailwindcss').Config} */
-module.exports = {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
-  theme: {
-    container: {
-      center: true,
-      padding: '1.5rem',
-      screens: {
-        lg: '1120px',
-        '2xl': '1280px',
-      },
-    },
-    extend: {
-      fontFamily: {
-        display: ['"Inter Tight"', 'Inter', 'ui-sans-serif', 'system-ui'],
-        body: ['Inter', 'ui-sans-serif', 'system-ui'],
-      },
-      colors: {
-        brand: {
-          50: '#f0f5ff',
-          100: '#dfe8ff',
-          200: '#b7ccff',
-          300: '#8aaaff',
-          400: '#5a7eff',
-          500: '#365cff',
-          600: '#2847d6',
-          700: '#1f38aa',
-          800: '#1a2f86',
-          900: '#152568',
+const updateCssForTailwind = (appPath) => {
+  log('Switching index.css to Tailwind entrypoint');
+  writeFile(appPath, 'src/index.css', '@import "tailwindcss";\n');
+};
+
+const mergeCompilerOptions = (compilerOptions = {}, extra = {}) => ({
+  ...compilerOptions,
+  ...extra,
+  paths: {
+    ...(compilerOptions.paths || {}),
+    '@/*': ['./src/*'],
+  },
+});
+
+const updateTsconfig = (appPath) => {
+  log('Updating tsconfig.json and tsconfig.app.json for path aliases');
+  const tsconfigPath = path.join(appPath, 'tsconfig.json');
+  const appConfigPath = path.join(appPath, 'tsconfig.app.json');
+
+  try {
+    const base = JSON.parse(fs.readFileSync(tsconfigPath, 'utf8'));
+    base.files = [];
+    base.references = [
+      { path: './tsconfig.app.json' },
+      { path: './tsconfig.node.json' },
+    ];
+    base.compilerOptions = mergeCompilerOptions(base.compilerOptions, { baseUrl: '.' });
+    fs.writeFileSync(tsconfigPath, JSON.stringify(base, null, 2));
+  } catch (error) {
+    writeFile(
+      appPath,
+      'tsconfig.json',
+      JSON.stringify(
+        {
+          files: [],
+          references: [
+            { path: './tsconfig.app.json' },
+            { path: './tsconfig.node.json' },
+          ],
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@/*': ['./src/*'],
+            },
+          },
         },
-      },
-      boxShadow: {
-        soft: '0 20px 60px rgba(22, 38, 57, 0.12)',
-      },
-      borderRadius: {
-        xl: '1.25rem',
-      },
+        null,
+        2
+      ) + '\n'
+    );
+  }
+
+  try {
+    const appConfig = JSON.parse(fs.readFileSync(appConfigPath, 'utf8'));
+    appConfig.compilerOptions = mergeCompilerOptions(appConfig.compilerOptions, { baseUrl: '.' });
+    fs.writeFileSync(appConfigPath, JSON.stringify(appConfig, null, 2));
+  } catch (error) {
+    writeFile(
+      appPath,
+      'tsconfig.app.json',
+      JSON.stringify(
+        {
+          compilerOptions: {
+            baseUrl: '.',
+            paths: {
+              '@/*': ['./src/*'],
+            },
+          },
+        },
+        null,
+        2
+      ) + '\n'
+    );
+  }
+};
+
+const updateViteConfig = (appPath) => {
+  log('Updating vite.config.ts for Tailwind plugin and @ alias');
+  writeFile(
+    appPath,
+    'vite.config.ts',
+    `import path from "path";
+import { fileURLToPath } from "node:url";
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
+import { defineConfig } from "vite";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+export default defineConfig({
+  plugins: [react(), tailwindcss()],
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
     },
   },
-  plugins: [],
+});
+`
+  );
 };
-`
-  );
 
-  writeFile(
-    appPath,
-    'postcss.config.cjs',
-    `module.exports = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
+const installNodeTypes = (appPath) => {
+  log('Installing @types/node for TS support');
+  runCommand(npmCommand, ['install', '-D', '@types/node'], { cwd: appPath });
 };
-`
-  );
 
-  writeFile(
-    appPath,
-    'src/index.css',
-    `@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@600;700&display=swap');
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  color-scheme: light;
-}
-
-body {
-  @apply bg-slate-50 text-slate-900 font-body antialiased;
-}
-
-a {
-  @apply text-brand-600 hover:text-brand-700 transition-colors;
-}
-
-.btn-primary {
-  @apply inline-flex items-center gap-2 rounded-full bg-brand-600 px-5 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-brand-500 active:scale-[0.99];
-}
-
-.badge {
-  @apply inline-flex items-center gap-2 rounded-full bg-brand-50 px-3 py-1 text-xs font-semibold text-brand-700 ring-1 ring-brand-100;
-}
-
-.card {
-  @apply rounded-2xl bg-white p-6 shadow-soft ring-1 ring-slate-100;
-}
-`
-  );
-}
-
-function scaffoldUi(appPath) {
+const scaffoldUi = (appPath) => {
   log('Scaffolding clean folder structure and minimal UI');
   writeFile(
     appPath,
@@ -172,9 +176,11 @@ function scaffoldUi(appPath) {
 
 export function FeatureCard({ title, description }: FeatureCardProps) {
   return (
-    <div className="card h-full">
-      <div className="badge mb-3">New</div>
-      <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+    <div className="h-full rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+        New
+      </div>
+      <h3 className="mt-3 text-lg font-semibold text-slate-900">{title}</h3>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
     </div>
   );
@@ -190,52 +196,64 @@ import { FeatureCard } from './components/FeatureCard';
 
 const features = [
   {
-    title: 'Type-safe by default',
-    description: 'Vite + React + TypeScript with sensible linting keeps regressions in check.',
+    title: 'Tailwind ready',
+    description: 'Tailwind v4 is wired through the Vite plugin and a single @import entry.',
   },
   {
-    title: 'Tailwind CSS v4 ready',
-    description: 'A thoughtful theme, base styles, and utilities so you can ship faster.',
+    title: 'TypeScript paths',
+    description: 'Aliases with @/* are configured in both tsconfig and Vite.',
   },
   {
-    title: 'Clean structure',
-    description: 'Components, pages, and styles are separated so the project stays tidy.',
+    title: 'ESLint + Prettier',
+    description: 'Linting and formatting scripts are set so you can stay consistent.',
   },
 ];
 
 function App() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-white to-slate-50">
+    <div className="min-h-screen bg-gradient-to-b from-slate-50 to-white text-slate-900">
       <header className="border-b border-slate-200 bg-white/70 backdrop-blur">
-        <div className="container flex items-center justify-between py-5">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-50 text-brand-700 ring-1 ring-brand-100">
-              <span className="text-xl font-display">VR</span>
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 text-white shadow-sm">
+              <span className="text-lg font-semibold">VR</span>
             </div>
             <div>
-              <p className="text-sm font-semibold text-slate-900">create-vite-react-tw4</p>
+              <p className="text-sm font-semibold">create-vite-react-tw4</p>
               <p className="text-xs text-slate-500">Starter ready to ship</p>
             </div>
           </div>
-          <a className="btn-primary" href="https://vitejs.dev" target="_blank" rel="noreferrer">
+          <a
+            className="inline-flex items-center gap-2 rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800"
+            href="https://vitejs.dev"
+            target="_blank"
+            rel="noreferrer"
+          >
             View Vite docs
           </a>
         </div>
       </header>
 
-      <main className="container grid gap-12 py-16 lg:py-20">
-        <section className="grid gap-6 text-center lg:grid-cols-[1fr,1fr] lg:items-center lg:text-left">
+      <main className="mx-auto grid max-w-5xl gap-12 px-6 py-16 lg:py-20">
+        <section className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr] lg:items-center">
           <div className="space-y-6">
-            <div className="badge w-fit">Everything wired up</div>
-            <h1 className="text-4xl font-bold leading-tight text-slate-900 sm:text-5xl">
+            <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">
+              Everything wired up
+            </div>
+            <h1 className="text-4xl font-bold leading-tight sm:text-5xl">
               Build fast with React, Tailwind, and TypeScript.
             </h1>
             <p className="text-lg text-slate-600">
               Start from a clean, typed, and styled foundation. Hot reloading, linting, formatting,
-              and a thoughtful theme are ready so you can focus on product.
+              and Tailwind v4 are ready so you can focus on product.
             </p>
             <div className="flex flex-wrap gap-3">
-              <a className="btn-primary" href="https://tailwindcss.com" target="_blank" rel="noreferrer">
+              <a
+                className="inline-flex items-center gap-2 rounded-full bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+                href="https://tailwindcss.com"
+                target="_blank"
+                rel="noreferrer"
+              >
                 Explore Tailwind CSS
               </a>
               <a
@@ -248,16 +266,18 @@ function App() {
               </a>
             </div>
           </div>
-          <div className="card">
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-900">Project checklist</p>
-              <span className="badge">Ready</span>
+              <p className="text-sm font-semibold">Project checklist</p>
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                Ready
+              </span>
             </div>
             <ul className="mt-4 space-y-3 text-sm text-slate-700">
               <li>✔️ Vite + React + TypeScript</li>
-              <li>✔️ Tailwind CSS v4 theme</li>
-              <li>✔️ ESLint + Prettier</li>
-              <li>✔️ Clean folder structure</li>
+              <li>✔️ Tailwind via @tailwindcss/vite</li>
+              <li>✔️ ESLint + Prettier scripts</li>
+              <li>✔️ Path aliases @/*</li>
               <li>✔️ Minimal landing page</li>
             </ul>
           </div>
@@ -292,9 +312,9 @@ ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
 );
 `
   );
-}
+};
 
-function addLintAndFormatConfigs(appPath) {
+const addLintAndFormatConfigs = (appPath) => {
   log('Setting ESLint and Prettier configs');
   writeFile(
     appPath,
@@ -372,9 +392,9 @@ node_modules
     typecheck: 'tsc --noEmit',
   };
   fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2));
-}
+};
 
-function updateProjectReadme(appPath, appName) {
+const updateProjectReadme = (appPath, appName) => {
   log('Refreshing project README');
   writeFile(
     appPath,
@@ -385,9 +405,9 @@ A starter generated by create-vite-react-tw4.
 
 ## What's inside?
 - Vite + React + TypeScript
-- Tailwind CSS v4 with a custom theme
+- Tailwind CSS v4 via @tailwindcss/vite
 - ESLint + Prettier
-- Clean folders: src/components, src/styles
+- Path aliases @/* configured for TS + Vite
 - Minimal landing page UI
 
 ## Available scripts
@@ -411,9 +431,9 @@ A starter generated by create-vite-react-tw4.
 Build with npm run build then deploy dist/ with your preferred host.
 `
   );
-}
+};
 
-function printNextSteps(appName) {
+const printNextSteps = (appName) => {
   console.log('\nAll set!');
   console.log(`\nNext steps:\n  cd ${appName}\n  npm run dev\n`);
   console.log('Useful scripts:');
@@ -422,7 +442,7 @@ function printNextSteps(appName) {
   console.log('  npm run format:check # Prettier check');
   console.log('  npm run typecheck    # TS type checking');
   console.log('\nHappy building!');
-}
+};
 
 async function main() {
   const appName = process.argv[2];
@@ -437,11 +457,14 @@ async function main() {
   ensureTarget(appPath);
   createViteReactTs(appPath, appName);
   installStylingAndLinting(appPath);
-  configureTailwind(appPath);
+  installNodeTypes(appPath);
+  updateCssForTailwind(appPath);
+  updateTsconfig(appPath);
+  updateViteConfig(appPath);
   scaffoldUi(appPath);
   addLintAndFormatConfigs(appPath);
   updateProjectReadme(appPath, appName);
   printNextSteps(appName);
 }
 
-module.exports = { main };
+export default main;
