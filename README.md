@@ -36,7 +36,7 @@ npm run dev
 - `vite.config.ts` – Tailwind plugin + `@` alias to `./src`.
 - ESLint/Prettier configs and updated `package.json` scripts.
 
-## Tailwind setup (what the CLI applies)
+## Tailwind setup
 
 1. `npm install tailwindcss @tailwindcss/vite`
 2. Replace `src/index.css` with:
